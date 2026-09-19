@@ -36,25 +36,6 @@ export default function AutoFairLandingPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Manejo de Login
-  const handleLoginSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setErrorMsg('');
-
-    try {
-      if (activeTab === 'admin') {
-        router.push('/admin/dashboard');
-      } else {
-        router.push('/taller/dashboard');
-      }
-    } catch (err: any) {
-      setErrorMsg('Credenciales inválidas. Por favor intenta de nuevo.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const stackTecnologico = [
     {
       categoria: "Frontend & UI",
@@ -106,7 +87,7 @@ export default function AutoFairLandingPage() {
   onClick={() => router.push('/login')}
   className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-2.5 rounded-xl transition-all text-sm shadow-lg shadow-indigo-600/30 flex items-center gap-2 active:scale-95"
 >
-  <Lock className="w-4 h-4" /> Ingresar al Sistema
+  <Lock className="w-4 h-4" /> Iniciar sesion
 </button>
       </header>
 
@@ -127,21 +108,6 @@ export default function AutoFairLandingPage() {
           Transforma las notas técnicas del taller en diagnósticos transparentes con Inteligencia Artificial. Envía evidencias fotográficas y recibe confirmaciones en tiempo real.
         </p>
 
-        <div className="mt-10 flex flex-col sm:flex-row gap-4 w-full sm:w-auto justify-center">
-          <button 
-  onClick={() => router.push('/login')}
-  className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-8 py-4 rounded-xl transition-all shadow-xl shadow-indigo-600/30 text-base"
->
-  <Zap className="w-5 h-5" /> Acceso Mecánicos / Taller
-</button>
-          
-          <button 
-  onClick={() => router.push('/login')}
-  className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-slate-200 font-semibold px-8 py-4 rounded-xl border border-slate-800 transition-all text-base"
->
-  <ShieldCheck className="w-5 h-5 text-indigo-400" /> Panel Administrador
-</button>
-        </div>
 
         {/* METRICAS RÁPIDAS */}
         <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6 w-full max-w-4xl pt-10 border-t border-slate-900">
@@ -159,7 +125,7 @@ export default function AutoFairLandingPage() {
           </div>
           <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800/60">
             <p className="text-3xl font-extrabold text-indigo-400">Telegram</p>
-            <p className="text-xs text-slate-400 mt-1">Botonera de Aprobación</p>
+            <p className="text-xs text-slate-400 mt-1">Mensajes de Aprobación</p>
           </div>
         </div>
       </section>

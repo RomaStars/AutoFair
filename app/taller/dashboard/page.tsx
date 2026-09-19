@@ -1,20 +1,26 @@
-// app/taller/dashboard/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 import { 
+  Users, 
+  FilePlus, 
+  Clock, 
+  LogOut, 
+  Loader2, 
   Camera, 
   Send, 
-  CheckCircle, 
-  User, 
-  Car, 
-  Wrench, 
   Sparkles, 
-  Loader2, 
-  ChevronRight, 
-  ChevronLeft 
+  Plus, 
+  CheckCircle2, 
+  XCircle, 
+  Car, 
+  Phone, 
+  User as UserIcon,
+  Wrench,
+  Search,
+  DollarSign
 } from 'lucide-react';
 
 export default function MecanicoDashboardPage() {
@@ -24,16 +30,36 @@ export default function MecanicoDashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // Estados de Control de Acceso
+  // -------------------------------------------------------------
+  // ESTADOS DE CONTROL DE ACCESO
+  // -------------------------------------------------------------
   const [verificandoAcceso, setVerificandoAcceso] = useState(true);
   const [estadoMecanico, setEstadoMecanico] = useState<'PENDIENTE' | 'APROBADO' | null>(null);
 
-  // Control del Wizard en pasos
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [statusText, setStatusText] = useState('');
+  // -------------------------------------------------------------
+  // NAVEGACIÓN Y DASHBOARD
+  // -------------------------------------------------------------
+  const [activeTab, setActiveTab] = useState<'espera' | 'presupuesto' | 'clientes'>('espera');
 
-  // Estados del Formulario
+  // -------------------------------------------------------------
+  // ESTADOS PARA DATOS (CLIENTES Y PRESUPUESTOS)
+  // -------------------------------------------------------------
+  const [presupuestosEspera, setPresupuestosEspera] = useState<any[]>([]);
+  const [clientesLista, setClientesLista] = useState<any[]>([]);
+  const [loadingTabla, setLoadingTabla] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+
+  // Formulario Agregar Cliente
+  const [nuevoCliente, setNuevoCliente] = useState({
+    nombre: '',
+    telefono_telegram: '',
+    email: ''
+  });
+  const [guardandoCliente, setGuardandoCliente] = useState(false);
+
+  // Formulario Presupuesto
+  const [loadingPresupuesto, setLoadingPresupuesto] = useState(false);
+  const [statusText, setStatusText] = useState('');
   const [formData, setFormData] = useState({
     clienteNombre: '',
     clienteTelefono: '',
@@ -42,49 +68,93 @@ export default function MecanicoDashboardPage() {
     montoTotal: '',
     notasTecnicas: '',
   });
-
-  // Evidencias Multimedia
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // -------------------------------------------------------------
   // VALIDACIÓN DE ACCESO
   // -------------------------------------------------------------
-useEffect(() => {
-  const verificarEstadoAcceso = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+  useEffect(() => {
+    const verificarEstadoAcceso = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
 
-    if (!session) {
-      router.push('/login');
-      return;
-    }
+      if (!session) {
+        router.push('/login');
+        return;
+      }
 
-    const { data: perfil } = await supabase
-      .from('perfiles')
-      .select('rol, estado')
-      .eq('id', session.user.id)
-      .single();
+      const { data: perfil } = await supabase
+        .from('perfiles')
+        .select('rol, estado')
+        .eq('id', session.user.id)
+        .single();
 
-    // 1. Redirigir si el rol en Supabase es 'ADMIN'
-    if (perfil?.rol === 'ADMIN') {
-      router.push('/admin/dashboard');
-      return;
-    }
+      if (perfil?.rol === 'ADMIN') {
+        router.push('/admin/dashboard');
+        return;
+      }
 
-    // 2. Aprobar acceso si el estado en Supabase es 'ACTIVO'
-    if (perfil?.estado === 'ACTIVO') {
-      setEstadoMecanico('APROBADO');
-    } else {
-      setEstadoMecanico('PENDIENTE');
-    }
+      if (perfil?.estado === 'ACTIVO') {
+        setEstadoMecanico('APROBADO');
+      } else {
+        setEstadoMecanico('PENDIENTE');
+      }
 
-    setVerificandoAcceso(false);
+      setVerificandoAcceso(false);
+    };
+
+    verificarEstadoAcceso();
+  }, [router, supabase]);
+
+  // -------------------------------------------------------------
+  // CARGA DE DATOS (ESPERA Y CLIENTES) Y SUSCRIPCIÓN EN TIEMPO REAL
+  // -------------------------------------------------------------
+  const cargarPresupuestosEspera = async () => {
+    setLoadingTabla(true);
+    const { data } = await supabase
+      .from('presupuestos')
+      .select('*')
+      .order('creado_en', { ascending: false });
+    
+    if (data) setPresupuestosEspera(data);
+    setLoadingTabla(false);
   };
 
-  verificarEstadoAcceso();
-}, [router, supabase]);
+  const cargarClientes = async () => {
+    const { data } = await supabase
+      .from('clientes')
+      .select('*')
+      .order('creado_en', { ascending: false });
+    
+    if (data) setClientesLista(data);
+  };
 
-  // Manejador de entrada de archivos
+  useEffect(() => {
+    if (estadoMecanico === 'APROBADO') {
+      cargarPresupuestosEspera();
+      cargarClientes();
+
+      // Suscripción en tiempo real a la tabla presupuestos
+      const channel = supabase
+        .channel('schema-db-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'presupuestos' },
+          () => {
+            cargarPresupuestosEspera();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [estadoMecanico]);
+
+  // -------------------------------------------------------------
+  // MANEJADORES DE FORMULARIOS
+  // -------------------------------------------------------------
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
@@ -93,10 +163,35 @@ useEffect(() => {
     }
   };
 
-  // Envío del Presupuesto
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleCrearCliente = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setGuardandoCliente(true);
+    try {
+      const { error } = await supabase
+        .from('clientes')
+        .insert([
+          {
+            nombre: nuevoCliente.nombre,
+            telefono_telegram: nuevoCliente.telefono_telegram,
+            email: nuevoCliente.email || null
+          }
+        ]);
+
+      if (error) throw new Error(error.message);
+
+      alert('Cliente guardado exitosamente.');
+      setNuevoCliente({ nombre: '', telefono_telegram: '', email: '' });
+      cargarClientes();
+    } catch (err: any) {
+      alert('Error al registrar cliente: ' + err.message);
+    } finally {
+      setGuardandoCliente(false);
+    }
+  };
+
+  const handleSubmitPresupuesto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoadingPresupuesto(true);
     setStatusText('1/4 Subiendo evidencia multimedia...');
 
     try {
@@ -135,68 +230,167 @@ useEffect(() => {
         }
       }
 
-      setStatusText('3/4 Registrando presupuesto en la BD...');
+setStatusText('3/4 Registrando datos en la BD...');
+
+      // 0. Obtener el id del mecánico actual logueado
+      const { data: { user } } = await supabase.auth.getUser();
+      let mecanicoId: string | null = null;
+
+      if (user) {
+        const { data: mecanicoData } = await supabase
+          .from('mecanicos')
+          .select('id')
+          .eq('usuario_id', user.id)
+          .maybeSingle();
+
+        if (mecanicoData) {
+          mecanicoId = mecanicoData.id;
+        }
+      }
+
+      // 1. Insertar o recuperar Cliente por su teléfono
+      let clienteId: string;
+      const { data: clienteExistente } = await supabase
+        .from('clientes')
+        .select('id')
+        .eq('telefono_telegram', formData.clienteTelefono)
+        .maybeSingle();
+
+      if (clienteExistente) {
+        clienteId = clienteExistente.id;
+      } else {
+        const { data: nuevoCliente, error: errCliente } = await supabase
+          .from('clientes')
+          .insert([
+            {
+              nombre: formData.clienteNombre,
+              telefono: formData.clienteTelefono
+            }
+          ])
+          .select()
+          .single();
+
+        if (errCliente) throw new Error('Error al registrar cliente: ' + errCliente.message);
+        clienteId = nuevoCliente.id;
+      }
+
+      // 2. Insertar o recuperar Vehículo por su placa
+      let vehiculoId: string;
+      const { data: vehiculoExistente } = await supabase
+        .from('vehiculos')
+        .select('id')
+        .eq('placa', formData.vehiculoPlaca)
+        .maybeSingle();
+
+      if (vehiculoExistente) {
+        vehiculoId = vehiculoExistente.id;
+      } else {
+        const { data: nuevoVehiculo, error: errVehiculo } = await supabase
+          .from('vehiculos')
+          .insert([
+            {
+              cliente_id: clienteId,
+              placa: formData.vehiculoPlaca,
+              marca: formData.vehiculoModelo?.split(' ')[0] || 'No especificada',
+              modelo: formData.vehiculoModelo
+            }
+          ])
+          .select()
+          .single();
+
+        if (errVehiculo) throw new Error('Error al registrar vehículo: ' + errVehiculo.message);
+        vehiculoId = nuevoVehiculo.id;
+      }
+
+      // 3. Crear el Presupuesto
+      // En lugar de enviar monto_total, enviamos los campos origen para que la BD calcule el total
+      const montoTotalNum = parseFloat(formData.montoTotal) || 0;
+
       const { data: dbData, error: dbError } = await supabase
         .from('presupuestos')
         .insert([
           {
-            cliente_nombre: formData.clienteNombre,
-            cliente_telefono: formData.clienteTelefono,
-            vehiculo_placa: formData.vehiculoPlaca,
-            vehiculo_modelo: formData.vehiculoModelo,
-            monto_total: parseFloat(formData.montoTotal) || 0,
-            notas_tecnicas: formData.notasTecnicas,
+            vehiculo_id: vehiculoId,
+            mecanico_id: mecanicoId,
+            monto_repuestos: montoTotalNum, // o distribuye entre repuestos y mano de obra
+            monto_mano_obra: 0,
             resumen_ia: resumenIA,
-            evidencia_url: mediaPublicUrl,
             estado: 'Pendiente'
           }
         ])
         .select()
         .single();
 
-      if (dbError) throw new Error('Error en BD: ' + dbError.message);
+      if (dbError) throw new Error('Error en BD al guardar presupuesto: ' + dbError.message);
 
-      setStatusText('4/4 Enviando notificación con Webhook...');
-      if (process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL) {
-        await fetch(process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL, {
+      // 4. Guardar evidencia multimedia si existe
+      if (mediaPublicUrl && dbData) {
+        await supabase
+          .from('evidencias')
+          .insert([
+            {
+              presupuesto_id: dbData.id,
+              tipo: 'imagen',
+              url_archivo: mediaPublicUrl,
+              descripcion: formData.notasTecnicas
+            }
+          ]);
+      }
+
+setStatusText('4/4 Enviando notificación a Telegram mediante Webhook...');
+      const webhookUrl = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL;
+      
+      if (webhookUrl) {
+        const payload = {
+          presupuestoId: dbData.id,
+          cliente: formData.clienteNombre,
+          chat_id: formData.clienteTelefono, // Contiene el Chat ID o Teléfono de Telegram
+          vehiculo: `${formData.vehiculoModelo} (${formData.vehiculoPlaca})`,
+          monto: formData.montoTotal,
+          resumenExplicativo: resumenIA,
+          evidenciaUrl: mediaPublicUrl
+        };
+
+        await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            presupuestoId: dbData.id,
-            cliente: formData.clienteNombre,
-            telefono: formData.clienteTelefono,
-            vehiculo: `${formData.vehiculoModelo} (${formData.vehiculoPlaca})`,
-            monto: formData.montoTotal,
-            resumenExplicativo: resumenIA,
-            evidenciaUrl: mediaPublicUrl
-          })
+          body: JSON.stringify(payload)
         });
       }
 
-      setStep(3);
+      alert('Presupuesto enviado y notificación en proceso.');
+      setFormData({
+        clienteNombre: '',
+        clienteTelefono: '',
+        vehiculoPlaca: '',
+        vehiculoModelo: '',
+        montoTotal: '',
+        notasTecnicas: ''
+      });
+      setFile(null);
+      setPreviewUrl(null);
+      setActiveTab('espera');
+      cargarPresupuestosEspera();
     } catch (err: any) {
       alert(err.message || 'Error durante el proceso');
     } finally {
-      setLoading(false);
+      setLoadingPresupuesto(false);
       setStatusText('');
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      clienteNombre: '',
-      clienteTelefono: '',
-      vehiculoPlaca: '',
-      vehiculoModelo: '',
-      montoTotal: '',
-      notasTecnicas: ''
-    });
-    setFile(null);
-    setPreviewUrl(null);
-    setStep(1);
+  const seleccionarClienteParaPresupuesto = (cliente: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      clienteNombre: cliente.nombre || '',
+      clienteTelefono: cliente.telefono_telegram || ''
+    }));
+    setActiveTab('presupuesto');
   };
 
-  // 1. Pantalla de Carga Inicial
+  // -------------------------------------------------------------
+  // VISTAS DE ESTADO DE AUTENTICACIÓN
+  // -------------------------------------------------------------
   if (verificandoAcceso) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
@@ -207,7 +401,6 @@ useEffect(() => {
     );
   }
 
-  // 2. Pantalla de Cuenta Pendiente de Aprobación
   if (estadoMecanico === 'PENDIENTE') {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
@@ -233,219 +426,457 @@ useEffect(() => {
     );
   }
 
-  // 3. Formulario Completo (Mecánico Aprobado)
+  // -------------------------------------------------------------
+  // DASHBOARD DE ESCRITORIO
+  // -------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans max-w-md mx-auto border-x border-slate-800">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       
-      {/* HEADER MÓVIL */}
-      <header className="p-4 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-10 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-indigo-600 rounded-xl text-white">
+      {/* HEADER DE ESCRITORIO */}
+      <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-20 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-600/30">
             <Wrench className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-bold text-sm leading-tight text-white">Recepción Móvil</h1>
-            <p className="text-xs text-slate-400">Módulo del Mecánico</p>
+            <h1 className="font-bold text-base leading-tight text-white">Panel del Mecánico</h1>
+            <p className="text-xs text-slate-400">Gestión de diagnósticos y presupuestos</p>
           </div>
         </div>
-        <span className="text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded-full font-medium">
-          Paso {step} de 3
-        </span>
+
+        {/* NAVEGACIÓN PRINCIPAL (PESTAÑAS) */}
+        <nav className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+          <button
+            onClick={() => setActiveTab('espera')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'espera'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            Clientes en Espera
+          </button>
+
+          <button
+            onClick={() => setActiveTab('presupuesto')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'presupuesto'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <FilePlus className="w-4 h-4" />
+            Enviar Presupuesto
+          </button>
+
+          <button
+            onClick={() => setActiveTab('clientes')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'clientes'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Agregar / Lista Clientes
+          </button>
+        </nav>
+
+        {/* BOTÓN SALIR */}
+        <button
+          onClick={async () => {
+            await supabase.auth.signOut();
+            router.push('/login');
+          }}
+          className="flex items-center gap-2 text-xs text-slate-400 hover:text-rose-400 bg-slate-950 border border-slate-800 px-3 py-2 rounded-xl transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Cerrar Sesión</span>
+        </button>
       </header>
 
-      {/* CONTENIDO PRINCIPAL */}
-      <main className="flex-1 p-5 flex flex-col justify-between">
+      {/* CONTENIDO PRINCIPAL DE ESCRITORIO */}
+      <main className="flex-1 p-8 max-w-7xl w-full mx-auto">
         
-        {/* PASO 1 */}
-        {step === 1 && (
-          <div className="space-y-5 animate-in fade-in duration-300">
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <User className="w-5 h-5 text-indigo-400" /> Datos del Cliente
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">Ingresa la información básica de contacto</p>
-            </div>
-
-            <div className="space-y-3">
+        {/* ------------------------------------------------------------- */}
+        {/* PESTAÑA 1: CLIENTES EN ESPERA */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'espera' && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre Completo</label>
-                <input 
-                  type="text" 
-                  value={formData.clienteNombre}
-                  onChange={(e) => setFormData({...formData, clienteNombre: e.target.value})}
-                  placeholder="Ej. Carlos Mendoza" 
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                />
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-indigo-400" /> Presupuestos en Espera y Estado
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Listado de clientes con respuesta pendiente o estado de orden en tiempo real.
+                </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Teléfono / Telegram ID</label>
-                <input 
-                  type="tel" 
-                  value={formData.clienteTelefono}
-                  onChange={(e) => setFormData({...formData, clienteTelefono: e.target.value})}
-                  placeholder="Ej. +584120000000" 
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
+              <button
+                onClick={cargarPresupuestosEspera}
+                className="text-xs bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-3 py-2 rounded-xl transition-colors"
+              >
+                Refrescar Datos
+              </button>
             </div>
 
-            <div className="pt-2">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Car className="w-5 h-5 text-indigo-400" /> Datos del Vehículo
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">Placa y detalles del automóvil</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Placa</label>
-                <input 
-                  type="text" 
-                  value={formData.vehiculoPlaca}
-                  onChange={(e) => setFormData({...formData, vehiculoPlaca: e.target.value.toUpperCase()})}
-                  placeholder="AB123CD" 
-                  className="w-full uppercase bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
-                />
+            {loadingTabla ? (
+              <div className="p-12 text-center text-slate-500 text-sm">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-500" />
+                Cargando estado de presupuestos...
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Modelo / Año</label>
-                <input 
-                  type="text" 
-                  value={formData.vehiculoModelo}
-                  onChange={(e) => setFormData({...formData, vehiculoModelo: e.target.value})}
-                  placeholder="Toyota Corolla '18" 
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
-                />
+            ) : presupuestosEspera.length === 0 ? (
+              <div className="p-12 text-center bg-slate-900/50 border border-slate-800/80 rounded-2xl">
+                <p className="text-sm text-slate-400">No hay presupuestos registrados actualmente.</p>
               </div>
-            </div>
-
-            <button 
-              onClick={() => setStep(2)}
-              disabled={!formData.clienteNombre || !formData.vehiculoPlaca}
-              className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-indigo-600/20"
-            >
-              Continuar <ChevronRight className="w-5 h-5" />
-            </button>
+            ) : (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th className="p-4">Cliente</th>
+                      <th className="p-4">Vehículo</th>
+                      <th className="p-4">Monto ($USD)</th>
+                      <th className="p-4">Resumen IA</th>
+                      <th className="p-4">Estado</th>
+                      <th className="p-4">Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {presupuestosEspera.map((p) => {
+                      const estado = p.estado || 'Pendiente';
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
+                          <td className="p-4 font-medium text-white">
+                            <div className="flex flex-col">
+                              <span>{p.cliente_nombre || p.cliente}</span>
+                              <span className="text-[10px] text-slate-500">{p.cliente_telefono || p.telefono}</span>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-1.5 text-slate-300">
+                              <Car className="w-3.5 h-3.5 text-indigo-400" />
+                              <span>{p.vehiculo_modelo || p.vehiculo}</span>
+                              <span className="text-[10px] font-mono bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                                {p.vehiculo_placa}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-4 font-bold text-emerald-400">
+                            ${parseFloat(p.monto_total || p.monto || 0).toFixed(2)}
+                          </td>
+                          <td className="p-4 max-w-xs truncate text-slate-400" title={p.resumen_ia}>
+                            {p.resumen_ia || p.notas_tecnicas || 'Sin detalle'}
+                          </td>
+                          <td className="p-4">
+                            {estado === 'Aprobado' || estado === 'APROBADO' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Aprobado
+                              </span>
+                            ) : estado === 'Rechazado' || estado === 'RECHAZADO' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-full">
+                                <XCircle className="w-3.5 h-3.5" /> Rechazado
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
+                                <Clock className="w-3.5 h-3.5" /> Esperando Cliente
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-4 text-[10px] text-slate-500">
+                            {p.creado_en ? new Date(p.creado_en).toLocaleString() : 'Reciente'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
-        {/* PASO 2 */}
-        {step === 2 && (
-          <form onSubmit={handleSubmit} className="space-y-5 animate-in fade-in duration-300">
+        {/* ------------------------------------------------------------- */}
+        {/* PESTAÑA 2: ENVIAR PRESUPUESTO */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'presupuesto' && (
+          <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
             <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Camera className="w-5 h-5 text-indigo-400" /> Captura de Evidencias
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <FilePlus className="w-5 h-5 text-indigo-400" /> Crear y Enviar Presupuesto
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">Toma la foto o video del daño en vivo desde la cámara</p>
+              <p className="text-xs text-slate-400 mt-1">
+                Registra los detalles del diagnóstico, agrega la foto/evidencia y genera la notificación con IA.
+              </p>
             </div>
 
-            <div className="relative">
-              <input 
-                type="file" 
-                accept="image/*,video/*" 
-                capture="environment"
-                onChange={handleFileChange}
-                id="cameraInput"
-                className="hidden"
-              />
-              <label 
-                htmlFor="cameraInput" 
-                className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-slate-800 hover:border-indigo-500/50 bg-slate-900 rounded-2xl cursor-pointer transition-all p-4 text-center"
-              >
-                {previewUrl ? (
-                  <div className="relative w-full h-full flex items-center justify-center">
-                    <img src={previewUrl} alt="Vista previa" className="h-full object-contain rounded-lg" />
-                    <span className="absolute bottom-1 right-1 bg-black/70 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full">
-                      Capturado ✓
-                    </span>
+            <form onSubmit={handleSubmitPresupuesto} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre del Cliente</label>
+                  <div className="relative">
+                    <UserIcon className="w-4 h-4 absolute left-3 top-3.5 text-slate-500" />
+                    <input 
+                      type="text" 
+                      required
+                      value={formData.clienteNombre}
+                      onChange={(e) => setFormData({...formData, clienteNombre: e.target.value})}
+                      placeholder="Ej. Carlos Mendoza" 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
+                    />
                   </div>
-                ) : (
-                  <>
-                    <div className="p-3 bg-indigo-600/10 text-indigo-400 rounded-full mb-2">
-                      <Camera className="w-6 h-6" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Teléfono / Telegram ID</label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 absolute left-3 top-3.5 text-slate-500" />
+                    <input 
+                      type="tel" 
+                      required
+                      value={formData.clienteTelefono}
+                      onChange={(e) => setFormData({...formData, clienteTelefono: e.target.value})}
+                      placeholder="Ej. +584120000000" 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Placa Vehículo</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={formData.vehiculoPlaca}
+                    onChange={(e) => setFormData({...formData, vehiculoPlaca: e.target.value.toUpperCase()})}
+                    placeholder="AB123CD" 
+                    className="w-full uppercase bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Modelo / Año</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={formData.vehiculoModelo}
+                    onChange={(e) => setFormData({...formData, vehiculoModelo: e.target.value})}
+                    placeholder="Toyota Corolla '18" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Evidencia Multimedia (Foto/Video)</label>
+                  <div className="relative">
+                    <input 
+                      type="file" 
+                      accept="image/*,video/*" 
+                      onChange={handleFileChange}
+                      id="cameraInputDesk"
+                      className="hidden"
+                    />
+                    <label 
+                      htmlFor="cameraInputDesk" 
+                      className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-800 hover:border-indigo-500/50 bg-slate-950 rounded-xl cursor-pointer transition-all p-4 text-center"
+                    >
+                      {previewUrl ? (
+                        <div className="relative w-full h-full flex items-center justify-center">
+                          <img src={previewUrl} alt="Vista previa" className="h-full object-contain rounded-lg" />
+                          <span className="absolute bottom-1 right-1 bg-black/80 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/30">
+                            Cargado ✓
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="p-2.5 bg-indigo-600/10 text-indigo-400 rounded-full mb-2">
+                            <Camera className="w-5 h-5" />
+                          </div>
+                          <span className="text-xs font-semibold text-slate-300">Seleccionar o tomar archivo</span>
+                          <span className="text-[10px] text-slate-500 mt-1">Fotos JPG/PNG o Video corto</span>
+                        </>
+                      )}
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Monto Total Estimado ($USD)</label>
+                    <div className="relative">
+                      <DollarSign className="w-4 h-4 absolute left-3 top-3.5 text-emerald-400" />
+                      <input 
+                        type="number" 
+                        step="0.01"
+                        required
+                        value={formData.montoTotal}
+                        onChange={(e) => setFormData({...formData, montoTotal: e.target.value})}
+                        placeholder="0.00" 
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-base font-bold text-emerald-400 focus:outline-none focus:border-indigo-500"
+                      />
                     </div>
-                    <span className="text-xs font-semibold text-slate-300">Presiona para abrir la cámara</span>
-                    <span className="text-[10px] text-slate-500 mt-0.5">Formatos: Foto o Video del daño</span>
-                  </>
-                )}
-              </label>
-            </div>
+                  </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Monto Total Estimado ($USD)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
-                  required
-                  value={formData.montoTotal}
-                  onChange={(e) => setFormData({...formData, montoTotal: e.target.value})}
-                  placeholder="0.00" 
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-lg font-bold text-emerald-400 focus:outline-none focus:border-indigo-500"
-                />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                      <span>Notas Técnicas para Sintetizar</span>
+                      <span className="text-[10px] text-indigo-400 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> Gemini Flash
+                      </span>
+                    </label>
+                    <textarea 
+                      rows={3}
+                      value={formData.notasTecnicas}
+                      onChange={(e) => setFormData({...formData, notasTecnicas: e.target.value})}
+                      placeholder="Ej. Pastillas desgastadas al 90%, rectificación de discos urgente..." 
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
-                  <span>Notas Técnicas para IA</span>
-                  <span className="text-[10px] text-indigo-400 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> Gemini 2.5 Flash
-                  </span>
-                </label>
-                <textarea 
-                  rows={3}
-                  value={formData.notasTecnicas}
-                  onChange={(e) => setFormData({...formData, notasTecnicas: e.target.value})}
-                  placeholder="Ej. Pastillas de freno desgastadas al 90%, disco rayado requiere rectificación urgente." 
-                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
+              {loadingPresupuesto && (
+                <div className="p-3 bg-indigo-950/40 border border-indigo-500/20 rounded-xl flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+                  <span className="text-xs text-indigo-300 font-medium">{statusText}</span>
+                </div>
+              )}
 
-            {loading && (
-              <div className="p-3 bg-indigo-950/40 border border-indigo-500/20 rounded-xl flex items-center gap-3">
-                <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
-                <span className="text-xs text-indigo-300 font-medium">{statusText}</span>
-              </div>
-            )}
-
-            <div className="flex gap-3 pt-2">
-              <button 
-                type="button" 
-                onClick={() => setStep(1)}
-                disabled={loading}
-                className="w-1/3 bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center"
-              >
-                <ChevronLeft className="w-5 h-5" /> Volver
-              </button>
               <button 
                 type="submit" 
-                disabled={loading || !formData.montoTotal}
-                className="w-2/3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-emerald-600/20"
+                disabled={loadingPresupuesto || !formData.montoTotal}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20"
               >
-                {loading ? 'Procesando...' : 'Generar y Enviar'} <Send className="w-4 h-4" />
+                {loadingPresupuesto ? 'Procesando Envio...' : 'Enviar Presupuesto al Cliente'} <Send className="w-4 h-4" />
               </button>
-            </div>
-          </form>
+            </form>
+          </div>
         )}
 
-        {/* PASO 3 */}
-        {step === 3 && (
-          <div className="flex flex-col items-center justify-center text-center my-auto space-y-4 animate-in zoom-in-95 duration-300">
-            <div className="p-4 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">
-              <CheckCircle className="w-12 h-12" />
+        {/* ------------------------------------------------------------- */}
+        {/* PESTAÑA 3: AGREGAR Y LISTA DE CLIENTES */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'clientes' && (
+          <div className="grid grid-cols-3 gap-8 animate-in fade-in duration-300">
+            {/* FORMULARIO AGREGAR CLIENTE */}
+            <div className="col-span-1 space-y-4">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Plus className="w-5 h-5 text-indigo-400" /> Registrar Nuevo Cliente
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">Añade los datos para luego generar un presupuesto rápido</p>
+              </div>
+
+              <form onSubmit={handleCrearCliente} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre Completo</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={nuevoCliente.nombre}
+                    onChange={(e) => setNuevoCliente({...nuevoCliente, nombre: e.target.value})}
+                    placeholder="Ej. María Pérez" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Teléfono / Telegram</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={nuevoCliente.telefono_telegram}
+                    onChange={(e) => setNuevoCliente({...nuevoCliente, telefono_telegram: e.target.value})}
+                    placeholder="Ej. +584140000000" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Correo Electrónico (Opcional)</label>
+                  <input 
+                    type="email" 
+                    value={nuevoCliente.email}
+                    onChange={(e) => setNuevoCliente({...nuevoCliente, email: e.target.value})}
+                    placeholder="cliente@correo.com" 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={guardandoCliente}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2"
+                >
+                  {guardandoCliente ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Guardar Cliente
+                </button>
+              </form>
             </div>
-            <h2 className="text-xl font-bold text-white">¡Presupuesto Enviado!</h2>
-            <p className="text-xs text-slate-400 max-w-xs">
-              El diagnóstico procesado por la Inteligencia Artificial y las evidencias han sido transmitidas exitosamente por Telegram/WhatsApp.
-            </p>
-            <button 
-              onClick={resetForm}
-              className="mt-6 w-full bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 font-semibold py-3.5 rounded-xl transition-all text-sm"
-            >
-              Registrar Nuevo Vehículo
-            </button>
+
+            {/* TABLA / LISTA DE CLIENTES REGISTRADOS */}
+            <div className="col-span-2 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-indigo-400" /> Clientes Registrados
+                </h2>
+                
+                <div className="relative w-64">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-500" />
+                  <input 
+                    type="text"
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder="Buscar cliente..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th className="p-3.5">Nombre</th>
+                      <th className="p-3.5">Teléfono / Telegram</th>
+                      <th className="p-3.5">Email</th>
+                      <th className="p-3.5 text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {clientesLista
+                      .filter(c => c.nombre?.toLowerCase().includes(busqueda.toLowerCase()))
+                      .map((c) => (
+                        <tr key={c.id || c.telefono_telegram} className="hover:bg-slate-800/40 transition-colors">
+                          <td className="p-3.5 font-medium text-white">{c.nombre}</td>
+                          <td className="p-3.5 text-slate-400">{c.telefono_telegram}</td>
+                          <td className="p-3.5 text-slate-500">{c.email || 'N/A'}</td>
+                          <td className="p-3.5 text-right">
+                            <button
+                              onClick={() => seleccionarClienteParaPresupuesto(c)}
+                              className="bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors"
+                            >
+                              Presupuestar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    {clientesLista.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="p-6 text-center text-slate-500">
+                          No hay clientes registrados aún.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 

@@ -7,86 +7,86 @@ import { supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<'ADMIN' | 'MECANICO'>('ADMIN');
+  const [tab, setTab] = useState<'ADMIN' | 'MECANICO'>('MECANICO');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-    setLoading(true);
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setErrorMsg('');
+  setLoading(true);
 
-    // 1. Iniciar sesión con Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  // 1. Iniciar sesión con Supabase Auth
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
-    if (authError || !authData.user) {
-      setErrorMsg('Credenciales inválidas. Verifica tu correo y contraseña.');
-      setLoading(false);
-      return;
-    }
+  if (authError || !authData.user) {
+    setErrorMsg('Credenciales inválidas. Verifica tu correo y contraseña.');
+    setLoading(false);
+    return;
+  }
 
-    // Mapear el tab seleccionado hacia el valor exacto en la BD
-    const rolEsperado = tab === 'ADMIN' ? 'Administrador' : 'Mecánico';
+  // 2. Consultar el perfil utilizando la sesión obtenida
+  const { data: perfil, error: perfilError } = await supabase
+    .from('perfiles')
+    .select('rol')
+    .eq('id', authData.user.id)
+    .maybeSingle();
 
-    // 2. Consultar el perfil utilizando la sesión obtenida
-    const { data: perfil, error: perfilError } = await supabase
-      .from('perfiles')
-      .select('rol')
-      .eq('id', authData.user.id)
-      .maybeSingle();
+  if (perfilError || !perfil) {
+    setErrorMsg('No se pudo verificar el perfil de usuario. Revisa los permisos RLS en Supabase.');
+    setLoading(false);
+    return;
+  }
 
-    if (perfilError || !perfil) {
-      setErrorMsg('No se pudo verificar el perfil de usuario. Revisa los permisos RLS en Supabase.');
-      setLoading(false);
-      return;
-    }
+  // Estandarizamos tanto el rol de la BD como la opción del select a minúsculas
+  const rolBD = perfil.rol ? perfil.rol.toLowerCase().trim() : '';
+  const rolSeleccionado = tab.toLowerCase().trim();
 
-    // 3. Validar que el rol de la BD coincida con la pestaña seleccionada
-    if (perfil.rol !== rolEsperado && perfil.rol !== tab) {
-      setErrorMsg(`Acceso denegado: Esta cuenta no tiene permisos de ${rolEsperado}.`);
-      await supabase.auth.signOut();
-      setLoading(false);
-      return;
-    }
+  // 3. Validar que el rol coincida sin importar mayúsculas/minúsculas
+  if (rolBD !== rolSeleccionado) {
+    setErrorMsg(`Acceso denegado: Tu cuenta no tiene rol de ${tab}.`);
+    await supabase.auth.signOut();
+    setLoading(false);
+    return;
+  }
 
-    // 4. Redireccionar según el rol
-    if (perfil.rol === 'Administrador' || perfil.rol === 'ADMIN') {
-      router.push('/admin/dashboard');
-    } else {
-      router.push('/taller/dashboard');
-    }
-  };
+  // 4. Redireccionar evaluando en minúsculas
+  if (rolBD === 'admin') {
+    router.push('/admin/dashboard');
+  } else if (rolBD === 'mecanico') {
+    router.push('/taller/dashboard');
+  } else {
+    setErrorMsg('Rol de usuario no reconocido.');
+    await supabase.auth.signOut();
+  }
+
+  setLoading(false);
+};
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 sm:p-8">
         <h2 className="text-2xl font-bold text-center text-slate-800 mb-6">Ingresar a AutoFair</h2>
 
-        <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
-          <button
-            type="button"
-            onClick={() => setTab('MECANICO')}
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition ${
-              tab === 'MECANICO' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Mecánico
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('ADMIN')}
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition ${
-              tab === 'ADMIN' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Administrador
-          </button>
-        </div>
+<div className="mb-4">
+  <label className="block text-sm font-medium text-slate-700 mb-1">
+    Tipo de Usuario
+  </label>
+  <select
+  value={tab}
+  onChange={(e) => setTab(e.target.value as 'ADMIN' | 'MECANICO')}
+  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900 bg-white"
+>
+  <option value="MECANICO">Mecánico</option>
+  <option value="ADMIN">Administrador</option>
+</select>
+</div>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>

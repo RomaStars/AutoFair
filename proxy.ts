@@ -1,4 +1,3 @@
-// middleware.ts
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
@@ -32,9 +31,16 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // Verificar si el rol en los metadatos o tabla de perfiles es ADMIN
-    const userRole = user.user_metadata?.role || user.app_metadata?.role;
-    if (userRole !== 'ADMIN') {
+    // Consultar el rol directamente en la tabla 'perfiles' de Supabase
+    const { data: perfil } = await supabase
+      .from('perfiles')
+      .select('rol')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const rolNormalizado = perfil?.rol ? perfil.rol.toUpperCase().trim() : '';
+
+    if (rolNormalizado !== 'ADMIN') {
       return NextResponse.redirect(new URL('/taller/dashboard', request.url));
     }
   }
