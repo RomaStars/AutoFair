@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function MecanicosPage() {
-  const [mecanicos, setMecanicos] = useState([]);
+  const [mecanicos, setMecanicos] = useState<any[]>([]);
   const [form, setForm] = useState({ nombre: '', especialidad: '', telefono_whatsapp: '' });
 
   const fetchMecanicos = async () => {

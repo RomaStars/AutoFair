@@ -189,31 +189,44 @@ export default function AdminDashboardPage() {
   };
 
 // Eliminar usuario permanentemente de la base de datos
-  const handleEliminar = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar permanentemente a este mecánico? Esta acción no se puede deshacer.')) return;
+const handleEliminar = async (id: string) => {
+  if (!confirm('¿Estás seguro de eliminar permanentemente a este mecánico? Esta acción no se puede deshacer.')) return;
 
-    // 1. Eliminar la referencia en la tabla mecanicos
-    const { error: errorMecanico } = await supabase
+  try {
+    // 1. Obtener el email del perfil antes de eliminarlo
+    const { data: perfil } = await supabase
+      .from('perfiles')
+      .select('email')
+      .eq('id', id)
+      .single();
+
+    // 2. Si se encuentra el correo, eliminar las solicitudes previas
+    if (perfil?.email) {
+      await supabase
+        .from('solicitudes_mecanicos')
+        .delete()
+        .eq('email', perfil.email);
+    }
+
+    // 3. Eliminar de la tabla mecanicos
+    await supabase
       .from('mecanicos')
       .delete()
       .eq('usuario_id', id);
 
-    if (errorMecanico) {
-      console.warn('Advertencia al eliminar registro de mecanicos:', errorMecanico.message);
-    }
-
-    // 2. Eliminar el perfil principal
+    // 4. Eliminar el perfil principal
     const { error } = await supabase
       .from('perfiles')
       .delete()
       .eq('id', id);
 
-    if (error) {
-      alert('Error al eliminar el registro: ' + error.message);
-    } else {
-      await Promise.all([cargarActivos(), cargarInactivos()]);
-    }
-  };
+    if (error) throw error;
+
+    await Promise.all([cargarActivos(), cargarInactivos()]);
+  } catch (error: any) {
+    alert('Error al eliminar el registro: ' + error.message);
+  }
+};
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">

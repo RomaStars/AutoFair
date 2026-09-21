@@ -38,9 +38,9 @@ export async function POST(req: Request) {
 
     // 5. Enviar los datos al Webhook de n8n
     // Reemplaza directamente la cadena entre comillas si no estás usando variables de entorno aún
-    const WEBHOOK_N8N_URL = process.env.N8N_PRESUPUESTO_WEBHOOK_URL || 'AQUI_TU_URL_DE_TEST_DE_N8N';
+    const WEBHOOK_N8N_URL = process.env.N8N_PRESUPUESTO_WEBHOOK_URL;
 
-    const responseN8n = await fetch(WEBHOOK_N8N_URL, {
+    const responseN8n = await fetch(WEBHOOK_N8N_URL!, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payloadN8n),

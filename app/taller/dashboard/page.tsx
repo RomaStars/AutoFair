@@ -30,11 +30,15 @@ export default function MecanicoDashboardPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // -------------------------------------------------------------
+// -------------------------------------------------------------
   // ESTADOS DE CONTROL DE ACCESO
   // -------------------------------------------------------------
   const [verificandoAcceso, setVerificandoAcceso] = useState(true);
   const [estadoMecanico, setEstadoMecanico] = useState<'PENDIENTE' | 'APROBADO' | null>(null);
+
+  // NUEVOS ESTADOS AGREGADOS:
+  const [nombreMecanico, setNombreMecanico] = useState<string>('');
+  const [mecanicoId, setMecanicoId] = useState<string | null>(null);
 
   // -------------------------------------------------------------
   // NAVEGACIÓN Y DASHBOARD
@@ -53,7 +57,8 @@ export default function MecanicoDashboardPage() {
   const [nuevoCliente, setNuevoCliente] = useState({
     nombre: '',
     telefono_telegram: '',
-    email: ''
+    email: '',
+    telegram_chat_id: ''
   });
   const [guardandoCliente, setGuardandoCliente] = useState(false);
 
@@ -86,15 +91,31 @@ const [formData, setFormData] = useState({
         return;
       }
 
+      // Obtener datos del perfil (nombre, rol, estado)
       const { data: perfil } = await supabase
         .from('perfiles')
-        .select('rol, estado')
+        .select('nombre, rol, estado')
         .eq('id', session.user.id)
         .single();
+
+      if (perfil) {
+        setNombreMecanico(perfil.nombre || 'Mecánico');
+      }
 
       if (perfil?.rol === 'ADMIN') {
         router.push('/admin/dashboard');
         return;
+      }
+
+      // Obtener id en la tabla 'mecanicos' asociado al usuario
+      const { data: mecanicoData } = await supabase
+        .from('mecanicos')
+        .select('id')
+        .eq('usuario_id', session.user.id)
+        .maybeSingle();
+
+      if (mecanicoData) {
+        setMecanicoId(mecanicoData.id);
       }
 
       if (perfil?.estado === 'ACTIVO') {
@@ -113,10 +134,13 @@ const [formData, setFormData] = useState({
   // CARGA DE DATOS (ESPERA Y CLIENTES) Y SUSCRIPCIÓN EN TIEMPO REAL
   // -------------------------------------------------------------
   const cargarPresupuestosEspera = async () => {
+    if (!mecanicoId) return; // Validación para evitar consultas sin el ID del mecánico
     setLoadingTabla(true);
+
     const { data } = await supabase
       .from('presupuestos')
       .select('*')
+      .eq('mecanico_id', mecanicoId) // <--- Filtro para traer solo sus presupuestos
       .order('creado_en', { ascending: false });
     
     if (data) setPresupuestosEspera(data);
@@ -133,7 +157,7 @@ const [formData, setFormData] = useState({
   };
 
   useEffect(() => {
-    if (estadoMecanico === 'APROBADO') {
+    if (estadoMecanico === 'APROBADO' && mecanicoId) {
       cargarPresupuestosEspera();
       cargarClientes();
 
@@ -153,7 +177,7 @@ const [formData, setFormData] = useState({
         supabase.removeChannel(channel);
       };
     }
-  }, [estadoMecanico]);
+  }, [estadoMecanico, mecanicoId]);
 
   // -------------------------------------------------------------
   // MANEJADORES DE FORMULARIOS
@@ -176,14 +200,15 @@ const [formData, setFormData] = useState({
           {
             nombre: nuevoCliente.nombre,
             telefono_telegram: nuevoCliente.telefono_telegram,
-            email: nuevoCliente.email || null
+            email: nuevoCliente.email || null,
+            telegram_chat_id: nuevoCliente.telegram_chat_id || null
           }
         ]);
 
       if (error) throw new Error(error.message);
 
       alert('Cliente guardado exitosamente.');
-      setNuevoCliente({ nombre: '', telefono_telegram: '', email: '' });
+      setNuevoCliente({ nombre: '', telefono_telegram: '', email: '', telegram_chat_id: '' });
       cargarClientes();
     } catch (err: any) {
       alert('Error al registrar cliente: ' + err.message);
@@ -450,7 +475,9 @@ setFormData({
             <Wrench className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="font-bold text-base leading-tight text-white">Panel del Mecánico</h1>
+            <h1 className="font-bold text-base leading-tight text-white">
+              {nombreMecanico ? `Panel de ${nombreMecanico}` : 'Panel del Mecánico'}
+            </h1>
             <p className="text-xs text-slate-400">Gestión de diagnósticos y presupuestos</p>
           </div>
         </div>
@@ -840,49 +867,60 @@ setFormData({
               </div>
 
               <form onSubmit={handleCrearCliente} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre Completo</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={nuevoCliente.nombre}
-                    onChange={(e) => setNuevoCliente({...nuevoCliente, nombre: e.target.value})}
-                    placeholder="Ej. María Pérez" 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
+  <div>
+    <label className="block text-xs font-semibold text-slate-300 mb-1">Nombre Completo</label>
+    <input 
+      type="text" 
+      required
+      value={nuevoCliente.nombre}
+      onChange={(e) => setNuevoCliente({...nuevoCliente, nombre: e.target.value})}
+      placeholder="Ej. María Pérez" 
+      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+    />
+  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Teléfono / Telegram</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={nuevoCliente.telefono_telegram}
-                    onChange={(e) => setNuevoCliente({...nuevoCliente, telefono_telegram: e.target.value})}
-                    placeholder="Ej. +584140000000" 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
+  <div>
+    <label className="block text-xs font-semibold text-slate-300 mb-1">Teléfono / Telegram</label>
+    <input 
+      type="text" 
+      required
+      value={nuevoCliente.telefono_telegram}
+      onChange={(e) => setNuevoCliente({...nuevoCliente, telefono_telegram: e.target.value})}
+      placeholder="Ej. +584140000000" 
+      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+    />
+  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Correo Electrónico (Opcional)</label>
-                  <input 
-                    type="email" 
-                    value={nuevoCliente.email}
-                    onChange={(e) => setNuevoCliente({...nuevoCliente, email: e.target.value})}
-                    placeholder="cliente@correo.com" 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
+  <div>
+    <label className="block text-xs font-semibold text-slate-300 mb-1">Telegram Chat ID</label>
+    <input 
+      type="text" 
+      value={nuevoCliente.telegram_chat_id}
+      onChange={(e) => setNuevoCliente({...nuevoCliente, telegram_chat_id: e.target.value})}
+      placeholder="Ej. 123456789" 
+      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+    />
+  </div>
 
-                <button
-                  type="submit"
-                  disabled={guardandoCliente}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2"
-                >
-                  {guardandoCliente ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Guardar Cliente
-                </button>
-              </form>
+  <div>
+    <label className="block text-xs font-semibold text-slate-300 mb-1">Correo Electrónico (Opcional)</label>
+    <input 
+      type="email" 
+      value={nuevoCliente.email}
+      onChange={(e) => setNuevoCliente({...nuevoCliente, email: e.target.value})}
+      placeholder="cliente@correo.com" 
+      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+    />
+  </div>
+
+  <button
+    type="submit"
+    disabled={guardandoCliente}
+    className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2"
+  >
+    {guardandoCliente ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Guardar Cliente
+  </button>
+</form>
             </div>
 
             {/* TABLA / LISTA DE CLIENTES REGISTRADOS */}
