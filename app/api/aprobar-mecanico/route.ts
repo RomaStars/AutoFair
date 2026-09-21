@@ -9,11 +9,12 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: Request) {
   try {
-    const { solicitudId, email, password, nombre, telefono, experiencia } = await req.json();
+    // 1. Extraer telegramChatId del cuerpo de la petición[cite: 4]
+    const { solicitudId, email, password, nombre, telefono, experiencia, telegram_chat_id } = await req.json();
 
     let userId: string;
 
-    // 1. Intentar crear el usuario en Supabase Auth
+    // Crear o recuperar usuario en Supabase Auth[cite: 4]
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -22,7 +23,6 @@ export async function POST(req: Request) {
     });
 
     if (authError) {
-      // Si el usuario ya existe en Auth, obtenemos su ID mediante consulta de administración
       if (authError.message.includes('already been registered')) {
         const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
         const existingUser = usersData?.users.find((u) => u.email === email);
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       userId = authData.user.id;
     }
 
-    // 2. Insertar o actualizar perfil con rol MECANICO y estado ACTIVO
+    // 2. Insertar o actualizar perfil[cite: 4]
     const { error: perfilError } = await supabaseAdmin
       .from('perfiles')
       .upsert(
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
     if (perfilError) throw perfilError;
 
-    // 3. Insertar o actualizar registro en la tabla 'mecanicos'
+    // 3. Guardar en la tabla 'mecanicos' incluyendo el telegram_chat_id[cite: 4]
     const { error: mecanicoError } = await supabaseAdmin
       .from('mecanicos')
       .upsert(
@@ -62,14 +62,15 @@ export async function POST(req: Request) {
           nombre,
           telefono_whatsapp: telefono,
           especialidad: experiencia,
-          usuario_id: userId
+          usuario_id: userId,
+          telegram_chat_id: telegram_chat_id ? telegram_chat_id : null // <--- Se asigna a la tabla mecanicos[cite: 2]
         },
         { onConflict: 'usuario_id' }
       );
 
     if (mecanicoError) throw mecanicoError;
 
-    // 4. Actualizar estado de la solicitud a APROBADO
+    // 4. Actualizar estado de la solicitud a APROBADO[cite: 4]
     const { error: updateError } = await supabaseAdmin
       .from('solicitudes_mecanicos')
       .update({ estado: 'APROBADO' })

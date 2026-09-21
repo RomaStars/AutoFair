@@ -9,6 +9,7 @@ interface Solicitud {
   nombre_completo: string;
   email: string;
   telefono: string;
+  telegram_chat_id?: string;
   password_provisoria: string;
   experiencia: string;
   estado: string;
@@ -126,6 +127,7 @@ export default function AdminDashboardPage() {
           nombre: solicitud.nombre_completo,
           telefono: solicitud.telefono,
           experiencia: solicitud.experiencia,
+          telegram_chat_id: solicitud.telegram_chat_id,
         }),
       });
 

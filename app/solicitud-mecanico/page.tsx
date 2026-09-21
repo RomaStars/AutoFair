@@ -1,3 +1,4 @@
+// app/solicitud-mecanico/page.tsx
 'use client';
 
 import { useState } from 'react';
@@ -9,6 +10,7 @@ export default function SolicitudMecanicoPage() {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
+  const [telegramChatId, setTelegramChatId] = useState(''); // <-- 1. NUEVO ESTADO
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [experiencia, setExperiencia] = useState('');
@@ -33,11 +35,13 @@ export default function SolicitudMecanicoPage() {
       return;
     }
 
+    // 2. ENVÍO A SUPABASE INCLUYENDO telegram_chat_id
     const { error } = await supabase.from('solicitudes_mecanicos').insert([
       {
         nombre_completo: nombre,
         email,
         telefono,
+        telegram_chat_id: telegramChatId, // <-- SE AGREGA AQUÍ
         password_provisoria: password,
         experiencia,
         estado: 'PENDIENTE',
@@ -113,6 +117,19 @@ export default function SolicitudMecanicoPage() {
                 value={telefono}
                 onChange={(e) => setTelefono(e.target.value)}
                 placeholder="+58 412 1234567"
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900"
+              />
+            </div>
+
+            {/* 3. NUEVO CAMPO EN EL FORMULARIO JSX */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Telegram Chat ID</label>
+              <input
+                type="text"
+                required
+                value={telegramChatId}
+                onChange={(e) => setTelegramChatId(e.target.value)}
+                placeholder="Ej. 123456789"
                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-900"
               />
             </div>

@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     const prompt = `Actúa como un asesor de servicio automotriz profesional. Convierte estas notas técnicas breves tomadas por un mecánico en un texto explicativo claro, amable y comprensible para un cliente que no sabe de mecánica:\n\n${bodyNotas}`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: prompt,
     });
 
