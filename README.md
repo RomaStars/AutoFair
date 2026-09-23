@@ -62,56 +62,60 @@ Ejecuta las siguientes sentencias SQL en el editor de Supabase para estructurar 
 
 ```sql
 -- Tabla Clientes
+-- Crear tipo ENUM si usas PostgreSQL/Supabase
+CREATE TYPE app_role AS ENUM ('ADMIN', 'MECANICO');
+
+-- Tabla Clientes
 CREATE TABLE clientes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nombre TEXT NOT NULL,
-    telefono_telegram TEXT UNIQUE NOT NULL,
-    telegram_chat_id TEXT,
-    email TEXT,
-    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    nombre VARCHAR NOT NULL,
+    telefono_telegram VARCHAR UNIQUE NOT NULL,
+    email VARCHAR,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    telegram_chat_id VARCHAR
 );
 
 -- Tabla Vehículos
 CREATE TABLE vehiculos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cliente_id UUID REFERENCES clientes(id) ON DELETE CASCADE,
-    placa TEXT UNIQUE NOT NULL,
-    marca TEXT,
-    modelo TEXT,
-    anio INT
+    placa VARCHAR UNIQUE NOT NULL,
+    marca VARCHAR,
+    modelo VARCHAR,
+    anio INT4
+);
+
+-- Tabla Perfiles
+CREATE TABLE perfiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    nombre VARCHAR,
+    rol app_role,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    estado VARCHAR CHECK (estado IN ('ACTIVO', 'INACTIVO', 'PENDIENTE')) DEFAULT 'PENDIENTE'
 );
 
 -- Tabla Mecánicos
 CREATE TABLE mecanicos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    usuario_id UUID UNIQUE,
-    nombre TEXT NOT NULL,
-    telefono_whatsapp TEXT UNIQUE NOT NULL,
-    telegram_chat_id TEXT,
-    especialidad TEXT,
-    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Tabla Perfiles (Control de Roles y Estados)
-CREATE TABLE perfiles (
-    id UUID PRIMARY KEY,
-    nombre TEXT,
-    email TEXT,
-    rol TEXT CHECK (rol IN ('ADMIN', 'MECANICO')),
-    estado TEXT CHECK (estado IN ('ACTIVO', 'INACTIVO', 'PENDIENTE')) DEFAULT 'PENDIENTE'
+    nombre VARCHAR NOT NULL,
+    telefono_whatsapp VARCHAR UNIQUE NOT NULL,
+    especialidad VARCHAR,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    usuario_id UUID UNIQUE REFERENCES perfiles(id) ON DELETE SET NULL,
+    telegram_chat_id VARCHAR
 );
 
 -- Tabla Solicitudes de Mecánicos
 CREATE TABLE solicitudes_mecanicos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nombre_completo TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    telefono TEXT NOT NULL,
-    telegram_chat_id TEXT,
+    nombre_completo VARCHAR NOT NULL,
+    email VARCHAR UNIQUE NOT NULL,
+    telefono VARCHAR NOT NULL,
     password_provisoria TEXT NOT NULL,
     experiencia TEXT,
-    estado TEXT CHECK (estado IN ('PENDIENTE', 'APROBADO', 'RECHAZADO')) DEFAULT 'PENDIENTE',
-    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    estado VARCHAR CHECK (estado IN ('PENDIENTE', 'APROBADO', 'RECHAZADO')) DEFAULT 'PENDIENTE',
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    telegram_chat_id VARCHAR
 );
 
 -- Tabla Presupuestos
@@ -123,7 +127,7 @@ CREATE TABLE presupuestos (
     monto_mano_obra NUMERIC(10,2) DEFAULT 0.00,
     monto_total NUMERIC(10,2) GENERATED ALWAYS AS (monto_repuestos + monto_mano_obra) STORED,
     resumen_ia TEXT,
-    estado TEXT CHECK (estado IN ('Pendiente', 'Aprobado', 'Rechazado', 'PENDIENTE', 'APROBADO', 'RECHAZADO')) DEFAULT 'Pendiente',
+    estado VARCHAR DEFAULT 'Pendiente',
     creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -131,9 +135,20 @@ CREATE TABLE presupuestos (
 CREATE TABLE evidencias (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     presupuesto_id UUID REFERENCES presupuestos(id) ON DELETE CASCADE,
-    tipo TEXT CHECK (tipo IN ('imagen', 'video', 'Foto', 'Video')),
+    tipo VARCHAR,
     url_archivo TEXT NOT NULL,
     descripcion TEXT
+);
+
+-- Tabla Interacciones Telegram (Faltaba en tu SQL)
+CREATE TABLE interacciones_telegram (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    presupuesto_id UUID REFERENCES presupuestos(id) ON DELETE CASCADE,
+    telegram_chat_id VARCHAR,
+    telegram_message_id VARCHAR,
+    respuesta_cliente VARCHAR,
+    fecha_envio TIMESTAMP WITH TIME ZONE,
+    fecha_respuesta TIMESTAMP WITH TIME ZONE
 );
 
 -- Habilitar publicación Realtime en presupuestos
