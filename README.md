@@ -174,21 +174,39 @@ ALTER PUBLICATION supabase_realtime ADD TABLE presupuestos;
 ## 📁 Estructura del Proyecto
 
 ```text
-├── app/
+app/
+├── admin/
+│   └── dashboard/          # Panel de administración central
+│       └── page.tsx
+├── api/
 │   ├── admin/
-│   │   └── dashboard/      # Panel de administración para gestión de mecánicos
-│   ├── api/
-│   │   ├── admin/mecanicos/# API de registro de mecánicos
-│   │   ├── aprobar-mecanico/# Endpoint de aprobación e inserción Auth/DB
-│   │   ├── enviar-presupuesto/ # Conector entre Supabase y Webhook n8n
-│   │   └── sintesis/       # Integración con Gemini AI SDK
-│   ├── login/              # Inicio de sesión por Roles
-│   ├── ordenes/            # Procesamiento e inserción rápida de órdenes
-│   └── solicitud-mecanico/ # Registro inicial/solicitud de acceso
-├── lib/
-│   └── supabaseClient.ts   # Configuración de cliente Supabase browser
-├── public/                 # Archivos estáticos
-└── README.md
+│   │   └── mecanicos/     # API de registro de mecánicos
+│   │       └── route.ts
+│   ├── aprobar-mecanico/   # Endpoint de aprobación
+│   │   └── route.ts
+│   ├── enviar-presupuesto/ # Conector entre Supabase / n8n
+│   │   └── route.ts
+│   └── sintesis/           # Integración con Gemini AI
+│       └── route.ts
+├── dashboard/              # Panel principal / vista general
+│   └── page.tsx
+├── login/                  # Inicio de sesión por rol
+│   └── page.tsx
+├── mecanicos/              # Vista / módulo de mecánicos
+│   └── page.tsx
+├── ordenes/                # Procesamiento e inserción de órdenes
+│   └── page.tsx
+├── registro/               # Vistas de registro de usuarios
+│   └── page.tsx
+├── solicitud-mecanico/     # Registro e ingreso inicial de solicitudes
+│   └── page.tsx
+└── taller/
+    └── dashboard/          # Panel específico para talleres
+        └── page.tsx
+lib/
+└── supabaseClient.ts       # Configuración del cliente Supabase
+public/                     # Archivos estáticos
+README.md
 ```
 
 ---
