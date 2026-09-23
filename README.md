@@ -1,36 +1,198 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🛠️ AutoFair - Sistema de Gestión y Notificación de Presupuestos Automotrices
 
-## Getting Started
+Una solución web moderna para talleres mecánicos que automatiza la generación de presupuestos, la síntesis de diagnósticos técnicos mediante **Inteligencia Artificial (Google Gemini)** y la notificación interactiva al cliente vía **Telegram** con sincronización en tiempo real.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 🚀 Características Principales
+
+* **Autenticación y Roles:** Control de acceso basado en roles (`ADMIN` y `MECANICO`) mediante Supabase Auth.
+* **Diagnóstico impulsado por IA:** Conversión de notas técnicas complejas en explicaciones claras para el cliente utilizando `gemini-2.5-flash`.
+* **Notificaciones Interactivas:** Integración mediante Webhooks (**n8n** + **Telegram Bot API**) con botones interactivos (*Aprobar / Rechazar*).
+* **Gestión Multimedia:** Carga de fotografías y videos de evidencias en Supabase Storage.
+* **Panel en Tiempo Real:** Dashboard interactivo con WebSockets (Supabase Realtime) para actualizar estados de aprobación instantáneamente.
+
+---
+
+## 🛠️ Tecnologías Utilizadas
+
+* **Frontend:** Next.js (App Router), React, Tailwind CSS, Lucide React.
+* **Backend & Base de Datos:** Supabase (PostgreSQL, Auth, Storage, Realtime Engine).
+* **Inteligencia Artificial:** Google Gen AI SDK (`@google/genai` con modelo Gemini 2.5 Flash).
+* **Automatización:** n8n Workflow Automation, Telegram Bot API.
+* **Despliegue Recomendado:** Vercel / Netlify.
+
+---
+
+## 📋 Requisitos Previos
+
+Asegúrate de contar con lo siguiente antes de comenzar:
+
+* **Node.js:** Versión 18.0 o superior.
+* **npm**, **pnpm** o **yarn**.
+* Una cuenta en [Supabase](https://supabase.com/).
+* Una API Key de [Google AI Studio](https://aistudio.google.com/).
+* Una instancia de [n8n](https://n8n.io/) configurada con un Bot de Telegram.
+
+---
+
+## ⚙️ Configuración del Entorno (`.env.local`)
+
+Crea un archivo `.env.local` en la raíz del proyecto y agrega las siguientes variables de entorno:
+
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=tu_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=tu_supabase_service_role_key
+
+# Google AI (Gemini)
+GEMINI_API_KEY=tu_gemini_api_key
+
+# Webhooks & Automatización (n8n)
+N8N_PRESUPUESTO_WEBHOOK_URL=https://tu-instancia-n8n.com/webhook/presupuesto
+NEXT_PUBLIC_N8N_WEBHOOK_URL=https://tu-instancia-n8n.com/webhook/ordenes
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🗄️ Configuración de la Base de Datos (Supabase)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Ejecuta las siguientes sentencias SQL en el editor de Supabase para estructurar la base de datos e índices requeridos:
 
-## Learn More
+```sql
+-- Tabla Clientes
+CREATE TABLE clientes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nombre TEXT NOT NULL,
+    telefono_telegram TEXT UNIQUE NOT NULL,
+    telegram_chat_id TEXT,
+    email TEXT,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-To learn more about Next.js, take a look at the following resources:
+-- Tabla Vehículos
+CREATE TABLE vehiculos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cliente_id UUID REFERENCES clientes(id) ON DELETE CASCADE,
+    placa TEXT UNIQUE NOT NULL,
+    marca TEXT,
+    modelo TEXT,
+    anio INT
+);
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+-- Tabla Mecánicos
+CREATE TABLE mecanicos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id UUID UNIQUE,
+    nombre TEXT NOT NULL,
+    telefono_whatsapp TEXT UNIQUE NOT NULL,
+    telegram_chat_id TEXT,
+    especialidad TEXT,
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+-- Tabla Perfiles (Control de Roles y Estados)
+CREATE TABLE perfiles (
+    id UUID PRIMARY KEY,
+    nombre TEXT,
+    email TEXT,
+    rol TEXT CHECK (rol IN ('ADMIN', 'MECANICO')),
+    estado TEXT CHECK (estado IN ('ACTIVO', 'INACTIVO', 'PENDIENTE')) DEFAULT 'PENDIENTE'
+);
 
-## Deploy on Vercel
+-- Tabla Solicitudes de Mecánicos
+CREATE TABLE solicitudes_mecanicos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nombre_completo TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    telefono TEXT NOT NULL,
+    telegram_chat_id TEXT,
+    password_provisoria TEXT NOT NULL,
+    experiencia TEXT,
+    estado TEXT CHECK (estado IN ('PENDIENTE', 'APROBADO', 'RECHAZADO')) DEFAULT 'PENDIENTE',
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+-- Tabla Presupuestos
+CREATE TABLE presupuestos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vehiculo_id UUID REFERENCES vehiculos(id) ON DELETE CASCADE,
+    mecanico_id UUID REFERENCES mecanicos(id) ON DELETE RESTRICT,
+    monto_repuestos NUMERIC(10,2) DEFAULT 0.00,
+    monto_mano_obra NUMERIC(10,2) DEFAULT 0.00,
+    monto_total NUMERIC(10,2) GENERATED ALWAYS AS (monto_repuestos + monto_mano_obra) STORED,
+    resumen_ia TEXT,
+    estado TEXT CHECK (estado IN ('Pendiente', 'Aprobado', 'Rechazado', 'PENDIENTE', 'APROBADO', 'RECHAZADO')) DEFAULT 'Pendiente',
+    creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+-- Tabla Evidencias Multimedia
+CREATE TABLE evidencias (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    presupuesto_id UUID REFERENCES presupuestos(id) ON DELETE CASCADE,
+    tipo TEXT CHECK (tipo IN ('imagen', 'video', 'Foto', 'Video')),
+    url_archivo TEXT NOT NULL,
+    descripcion TEXT
+);
+
+-- Habilitar publicación Realtime en presupuestos
+ALTER PUBLICATION supabase_realtime ADD TABLE presupuestos;
+```
+
+> **Nota:** Recuerda crear un Bucket en Supabase Storage llamado `evidencias-multimedia` con acceso público para almacenar las imágenes y videos cargados.
+
+---
+
+## 📦 Instalación y Puesta en Marcha
+
+1. **Clonar el repositorio:**
+   ```bash
+   git clone https://github.com/tu-usuario/taller-mecanico.git
+   cd taller-mecanico
+   ```
+
+2. **Instalar dependencias:**
+   ```bash
+   npm install
+   # o
+   yarn install
+   # o
+   pnpm install
+   ```
+
+3. **Ejecutar el servidor de desarrollo:**
+   ```bash
+   npm run dev
+   ```
+
+4. **Acceder a la aplicación:**
+   Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
+
+---
+
+## 📁 Estructura del Proyecto
+
+```text
+├── app/
+│   ├── admin/
+│   │   └── dashboard/      # Panel de administración para gestión de mecánicos
+│   ├── api/
+│   │   ├── admin/mecanicos/# API de registro de mecánicos
+│   │   ├── aprobar-mecanico/# Endpoint de aprobación e inserción Auth/DB
+│   │   ├── enviar-presupuesto/ # Conector entre Supabase y Webhook n8n
+│   │   └── sintesis/       # Integración con Gemini AI SDK
+│   ├── login/              # Inicio de sesión por Roles
+│   ├── ordenes/            # Procesamiento e inserción rápida de órdenes
+│   └── solicitud-mecanico/ # Registro inicial/solicitud de acceso
+├── lib/
+│   └── supabaseClient.ts   # Configuración de cliente Supabase browser
+├── public/                 # Archivos estáticos
+└── README.md
+```
+
+---
+
+## 📄 Licencia
+
+Este proyecto se distribuye bajo la licencia **MIT**. Consulta el archivo `LICENSE` para más información.
